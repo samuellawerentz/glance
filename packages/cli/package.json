@@ -1,0 +1,14 @@
+{
+  "name": "@glance/cli",
+  "private": true,
+  "description": "CLI for deploying folders to a Glance instance.",
+  "type": "module",
+  "bin": { "glance": "./index.ts" },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "typescript": "^5.7.3"
+  }
+}
