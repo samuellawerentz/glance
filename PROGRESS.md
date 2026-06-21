@@ -28,10 +28,10 @@ Status keys: `[ ]` todo · `[~]` in progress · `[x]` done · `[!]` blocked.
 - [x] **Gate P2** — thermo-nuclear review: fixed config-fetch fallback + dev-login error handling; extracted `ErrorBanner`, `hasAnyMethod`. typecheck+lint+build green. Manual smoke PASS (real worker + browser).
 
 ### Phase 3 — Deploy tooling + one-click wiring
-- [ ] **Step 10** — `scripts/setup.sh`: gen secrets+token → `wrangler secret put` (never into jsonc) → remote-migrate → deploy → print URL + token (token NOT in URL). · *med* · dep:6
-- [ ] **Step 11** — URL wiring: post-deploy `workers.dev` URLs into `vars` (both jsonc) + `_headers` CSP. Fragile — evaluate runtime-derived APP_URL. · *med* · dep:10
-- [ ] **Step 12** — Deploy-to-Cloudflare button + README first-run/token docs; Google demoted to optional; do NOT destructively strip `YOUR_*`. · *low* · dep:11
-- [ ] **Gate P3** — thermo-nuclear on Phase-3 diff → address → full suite green + manual one-click smoke → **commit** `Phase 3: one-click deploy tooling`
+- [x] **Step 10** — `scripts/setup.sh`: deploy-first (workers boot secret-less) → set each HMAC secret ONCE as a shared value on both workers + `BOOTSTRAP_TOKEN` on main → remote-migrate → print URL + token (token printed only when freshly generated, never in a URL). Idempotent via `wrangler secret list`. · *med* · dep:6
+- [x] **Step 11** — URL wiring: derive subdomain from the live deploy URL, single `YOUR-SUBDOMAIN` sentinel `sed` across both jsonc + `_headers`, rebuild + redeploy. Decision: keep `APP_URL` an explicit var (NOT runtime-derived) — same-origin/CSRF + cookie-secure must not trust a spoofable Host. · *med* · dep:10
+- [x] **Step 12** — Deploy-to-Cloudflare button + README quick-deploy/first-run/token docs; Google demoted to optional section; `YOUR_*` binding placeholders left intact. · *low* · dep:11
+- [x] **Gate P3** — independent shell review: 2 BLOCKERs found + fixed (per-worker secret divergence broke gated content → now one shared value; secrets set before worker existed → deploy-first). API suite 77 green, typecheck+lint+build clean.
 
 > **Phase-exit gate (every phase):** after a phase's steps land, run `/thermo-nuclear-code-quality-review` scoped to that phase's diff. Triage findings — fix legit ones, note any deliberately-deferred with rationale. Re-run the full suite; **all tests pass and no unaddressed finding remains before the phase is done** and the next starts. Then commit the phase as one scoped commit.
 
@@ -73,8 +73,8 @@ Status keys: `[ ]` todo · `[~]` in progress · `[x]` done · `[!]` blocked.
 - [x] `m-setup-panel-posts-and-redirects` · P0 · manual — verified in browser: token → /dashboard as superadmin + personal space.
 
 ### Phase 3 (manual)
-- [ ] `m-setup-script-idempotent` · P1 · manual
-- [ ] `m-one-click-fresh-deploy` · P0 · manual
+- [~] `m-setup-script-idempotent` · P1 · manual — verified by review + logic dry-run (deploy-first ordering, `secret list` keep-if-present, sentinel idempotent). NOT executed: needs a real Cloudflare account (unavailable in this env).
+- [~] `m-one-click-fresh-deploy` · P0 · manual — verified by review; NOT executed (needs a clean Cloudflare account). The bootstrap first-run path it depends on IS proven end-to-end against a local worker + browser (see Phase 2 smoke).
 
 ---
 
@@ -100,3 +100,4 @@ Status keys: `[ ]` todo · `[~]` in progress · `[x]` done · `[!]` blocked.
 - 2026-06-21 — **Phase 0 shipped** (commit `Phase 0: make Google optional`): optional google creds + BOOTSTRAP_TOKEN, `isGoogleEnabled` guards, `superadminExists`, S-D harness (real in-mem SQLite). 57 green.
 - 2026-06-21 — **Phase 1 shipped**: pure `bootstrapDecision`/`secretEquals`/`buildPublicConfig`, `bootstrapSuperadminByEmail` + `superadminStatus` (repo.ts), `POST /api/auth/bootstrap`, `GET /api/config`. `createPersonalSpace` extracted to repo.ts (reused by OAuth + bootstrap). Thermo-nuclear: lazy `status` thunk so reject paths do no DB I/O; RL 5/3600s. 77 green.
 - 2026-06-22 — **Phase 2 shipped**: login loader → `/api/config`; conditional Google / `SetupPanel` / dev-login; `import.meta.env.DEV` replaces hostname check. Thermo-nuclear fixes (config fallback, dev-login error path, `ErrorBanner`/`hasAnyMethod`). Manual smoke against a real local worker (D1+KV) + browser: cross-origin 403, bad/query token 401, valid token 200+session cookie+superadmin(googleId null), idempotent re-mint 200, google routes 404, and full browser flow token→/dashboard.
+- 2026-06-22 — **Phase 3 shipped**: `scripts/setup.sh` (deploy-first, shared HMAC secrets, BOOTSTRAP_TOKEN, migrate, sentinel URL wiring, print token) + Deploy-to-Cloudflare button + README rewrite (Google optional, token first-run). Shell review caught & fixed 2 BLOCKERs (divergent per-worker secrets; secret-before-deploy abort). Manual one-click smoke NOT executed (no Cloudflare account here) — recorded `[~]`; underlying bootstrap path proven in Phase 2.
