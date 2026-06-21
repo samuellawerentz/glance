@@ -2,9 +2,10 @@ import { useState } from 'react'
 import { type LoaderFunctionArgs, redirect, useLoaderData, useSearchParams } from 'react-router'
 import { api, ApiError } from '../lib/api'
 import { safeNext } from '../lib/nav'
-import type { Me } from '../lib/types'
+import type { Me, PublicConfig } from '../lib/types'
 import { BlueprintField } from '@/components/BlueprintField'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import '@/tailwind.css'
 
 const ERRORS: Record<string, string> = {
@@ -12,6 +13,14 @@ const ERRORS: Record<string, string> = {
   oauth: "Google sign-in didn't go through. Try again.",
   state: 'Sign-in session expired before it finished. Start over.',
   exchange: "Couldn't finish the handshake with Google. Try again.",
+}
+
+// Maps bootstrap route status codes to a human message for the first-run setup form.
+const BOOTSTRAP_ERRORS: Record<number, string> = {
+  401: 'That setup token is incorrect.',
+  404: 'Setup is not available on this deployment.',
+  410: 'This deployment already has an admin — setup is closed.',
+  429: 'Too many attempts. Wait a bit and try again.',
 }
 
 const FEATURES = [
@@ -55,18 +64,25 @@ export async function loader({ request }: LoaderFunctionArgs) {
     return redirect(next ?? '/dashboard') // already signed in — honor the return URL
   } catch (err) {
     if (err instanceof ApiError && err.status === 401) {
-      return { isDev: window.location.hostname === 'localhost' }
+      // Logged out: ask the server which login options to offer (Google vs. first-run setup).
+      // Degrade gracefully — a config blip must never take down the login page itself.
+      try {
+        return await api.get<PublicConfig>('/api/config')
+      } catch {
+        return { googleEnabled: false, bootstrapAvailable: false } satisfies PublicConfig
+      }
     }
     throw err
   }
 }
 
 export function Component() {
-  const { isDev } = useLoaderData() as { isDev: boolean }
+  const { googleEnabled, bootstrapAvailable } = useLoaderData() as PublicConfig
   const [params] = useSearchParams()
   const [busy, setBusy] = useState(false)
   const error = params.get('error')
   const next = params.get('next')
+  const hasAnyMethod = googleEnabled || bootstrapAvailable || import.meta.env.DEV
 
   return (
     <div className="dark relative min-h-screen w-full overflow-hidden bg-[#070b16] font-sans text-foreground antialiased">
@@ -163,40 +179,51 @@ export function Component() {
             </div>
 
             <div className="rounded-xl border border-white/10 bg-card/70 p-6 backdrop-blur-sm">
-              {error && (
-                <div className="mb-4 rounded-lg border border-destructive/40 bg-destructive/15 px-3.5 py-2.5 text-sm text-destructive">
-                  {ERRORS[error] ?? 'Sign-in error.'}
-                </div>
+              {error && <ErrorBanner className="mb-4">{ERRORS[error] ?? 'Sign-in error.'}</ErrorBanner>}
+              {googleEnabled && (
+                <Button
+                  size="lg"
+                  className="h-12 w-full gap-3 text-[15px] font-medium"
+                  onClick={() => {
+                    const qs = next ? `?next=${encodeURIComponent(next)}` : ''
+                    window.location.href = `/api/auth/google${qs}`
+                  }}
+                >
+                  <span className="flex size-6 items-center justify-center rounded bg-white">
+                    <GoogleGlyph />
+                  </span>
+                  Sign in with Google
+                </Button>
               )}
-              <Button
-                size="lg"
-                className="h-12 w-full gap-3 text-[15px] font-medium"
-                onClick={() => {
-                  const qs = next ? `?next=${encodeURIComponent(next)}` : ''
-                  window.location.href = `/api/auth/google${qs}`
-                }}
-              >
-                <span className="flex size-6 items-center justify-center rounded bg-white">
-                  <GoogleGlyph />
-                </span>
-                Sign in with Google
-              </Button>
-              {isDev && (
+
+              {bootstrapAvailable && <SetupPanel next={next} withDivider={googleEnabled} />}
+
+              {import.meta.env.DEV && (
                 <Button
                   variant="outline"
                   className="mt-3 h-10 w-full font-mono text-xs"
                   disabled={busy}
                   onClick={async () => {
                     setBusy(true)
-                    await fetch('/api/auth/dev-login', { method: 'POST', credentials: 'include' })
-                    window.location.href = safeNext(next) ?? '/dashboard'
+                    const res = await fetch('/api/auth/dev-login', { method: 'POST', credentials: 'include' })
+                    if (res.ok) window.location.href = safeNext(next) ?? '/dashboard'
+                    else setBusy(false)
                   }}
                 >
                   {busy ? 'signing in…' : '› dev login (localhost)'}
                 </Button>
               )}
+
+              {!hasAnyMethod && (
+                <p className="text-center text-sm text-muted-foreground">
+                  No sign-in method is configured yet. Ask an administrator to finish setup.
+                </p>
+              )}
+
               <p className="mt-4 text-center text-xs text-muted-foreground">
-                Approved Google Workspace accounts only · sessions expire after 24h
+                {googleEnabled
+                  ? 'Approved Google Workspace accounts only · sessions expire after 24h'
+                  : 'Sessions expire after 24h'}
               </p>
             </div>
           </div>
@@ -211,6 +238,62 @@ export function Component() {
         </footer>
       </div>
     </div>
+  )
+}
+
+// Shared destructive message banner (sign-in errors + setup errors).
+function ErrorBanner({ className, children }: { className?: string; children: React.ReactNode }) {
+  return (
+    <div
+      className={`rounded-lg border border-destructive/40 bg-destructive/15 px-3.5 py-2.5 text-sm text-destructive${
+        className ? ` ${className}` : ''
+      }`}
+    >
+      {children}
+    </div>
+  )
+}
+
+// First-run setup: claim the first superadmin with the deploy's BOOTSTRAP_TOKEN. Posts the
+// token in the body (POST /api/auth/bootstrap) — same-origin, so the route's CSRF check passes.
+function SetupPanel({ next, withDivider }: { next: string | null; withDivider: boolean }) {
+  const [token, setToken] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault()
+    if (!token || busy) return
+    setBusy(true)
+    setErr(null)
+    try {
+      await api.post('/api/auth/bootstrap', { token })
+      window.location.href = safeNext(next) ?? '/dashboard'
+    } catch (e2) {
+      const status = e2 instanceof ApiError ? e2.status : 0
+      setErr(BOOTSTRAP_ERRORS[status] ?? 'Setup failed. Try again.')
+      setBusy(false)
+    }
+  }
+
+  return (
+    <form onSubmit={submit} className={withDivider ? 'mt-5 border-t border-white/10 pt-5' : undefined}>
+      <p className="mb-3 text-sm text-muted-foreground">
+        First run? Enter the setup token printed by the deploy to claim the admin account.
+      </p>
+      {err && <ErrorBanner className="mb-3">{err}</ErrorBanner>}
+      <Input
+        type="password"
+        autoComplete="off"
+        placeholder="setup token"
+        value={token}
+        onChange={(e) => setToken(e.target.value)}
+        className="h-11 font-mono"
+      />
+      <Button type="submit" size="lg" variant="outline" className="mt-3 h-11 w-full" disabled={!token || busy}>
+        {busy ? 'setting up…' : 'Complete setup'}
+      </Button>
+    </form>
   )
 }
 

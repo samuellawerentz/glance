@@ -23,9 +23,9 @@ Status keys: `[ ]` todo · `[~]` in progress · `[x]` done · `[!]` blocked.
 - [x] **Gate P1** — independent thermo-nuclear review: no blockers; SHOULD-FIX (reject-path DB read) addressed via lazy status thunk + tighter RL window. Suite 77 green, typecheck+lint clean.
 
 ### Phase 2 — Frontend first-run UX
-- [ ] **Step 8** — login loader fetches `/api/config`; hide Google + Workspace copy when `!googleEnabled`; drop brittle `hostname` dev check. · *low* · dep:7
-- [ ] **Step 9** — first-run `/setup` panel: token → POST bootstrap → /dashboard; error states; shown when `bootstrapAvailable`. · *low* · dep:6,8
-- [ ] **Gate P2** — thermo-nuclear on Phase-2 diff → address → full suite green + manual smoke → **commit** `Phase 2: first-run setup UI`
+- [x] **Step 8** — login loader fetches `/api/config` (graceful fallback on failure); hides Google + Workspace copy when `!googleEnabled`; dev-login now gated by `import.meta.env.DEV` (no brittle hostname check). · *low* · dep:7
+- [x] **Step 9** — `SetupPanel` on login: token → POST bootstrap → /dashboard; status→message error map; shown when `bootstrapAvailable`. · *low* · dep:6,8
+- [x] **Gate P2** — thermo-nuclear review: fixed config-fetch fallback + dev-login error handling; extracted `ErrorBanner`, `hasAnyMethod`. typecheck+lint+build green. Manual smoke PASS (real worker + browser).
 
 ### Phase 3 — Deploy tooling + one-click wiring
 - [ ] **Step 10** — `scripts/setup.sh`: gen secrets+token → `wrangler secret put` (never into jsonc) → remote-migrate → deploy → print URL + token (token NOT in URL). · *med* · dep:6
@@ -69,8 +69,8 @@ Status keys: `[ ]` todo · `[~]` in progress · `[x]` done · `[!]` blocked.
 - [x] `config-shape` · P0 · new-module-spec · S-B
 
 ### Phase 2 (manual — no web test runner)
-- [ ] `m-login-hides-google-when-disabled` · P1 · manual
-- [ ] `m-setup-panel-posts-and-redirects` · P0 · manual
+- [x] `m-login-hides-google-when-disabled` · P1 · manual — verified: /login shows setup field, no Google button (googleEnabled=false).
+- [x] `m-setup-panel-posts-and-redirects` · P0 · manual — verified in browser: token → /dashboard as superadmin + personal space.
 
 ### Phase 3 (manual)
 - [ ] `m-setup-script-idempotent` · P1 · manual
@@ -99,3 +99,4 @@ Status keys: `[ ]` todo · `[~]` in progress · `[x]` done · `[!]` blocked.
 - 2026-06-21 — Tracker created from `PLAN.md` + `TEST_PLAN.md`. Three-agent plan review (self + cursor + codex) reconciled; scope locked to bootstrap-superadmin-only. Key consensus folds: Phase 0 (Google genuinely optional), separate `bootstrapSuperadminByEmail` w/ member-promotion, idempotent decision (anti-lockout), own same-origin check on bootstrap route, token in body not URL, secrets never in jsonc.
 - 2026-06-21 — **Phase 0 shipped** (commit `Phase 0: make Google optional`): optional google creds + BOOTSTRAP_TOKEN, `isGoogleEnabled` guards, `superadminExists`, S-D harness (real in-mem SQLite). 57 green.
 - 2026-06-21 — **Phase 1 shipped**: pure `bootstrapDecision`/`secretEquals`/`buildPublicConfig`, `bootstrapSuperadminByEmail` + `superadminStatus` (repo.ts), `POST /api/auth/bootstrap`, `GET /api/config`. `createPersonalSpace` extracted to repo.ts (reused by OAuth + bootstrap). Thermo-nuclear: lazy `status` thunk so reject paths do no DB I/O; RL 5/3600s. 77 green.
+- 2026-06-22 — **Phase 2 shipped**: login loader → `/api/config`; conditional Google / `SetupPanel` / dev-login; `import.meta.env.DEV` replaces hostname check. Thermo-nuclear fixes (config fallback, dev-login error path, `ErrorBanner`/`hasAnyMethod`). Manual smoke against a real local worker (D1+KV) + browser: cross-origin 403, bad/query token 401, valid token 200+session cookie+superadmin(googleId null), idempotent re-mint 200, google routes 404, and full browser flow token→/dashboard.
