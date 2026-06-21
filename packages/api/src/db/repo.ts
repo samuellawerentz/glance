@@ -8,10 +8,17 @@ import {
   siteUserShares,
   spaceMembers,
   spaces,
+  users,
 } from './schema'
 
 export function toSessionUser(u: Pick<User, 'id' | 'email' | 'name' | 'role'>): SessionUser {
   return { id: u.id, email: u.email, name: u.name, role: u.role }
+}
+
+/** True iff at least one user row has role='superadmin'. Drives bootstrap availability. */
+export async function superadminExists(db: DrizzleD1Database): Promise<boolean> {
+  const row = await db.select({ id: users.id }).from(users).where(eq(users.role, 'superadmin')).limit(1)
+  return row.length > 0
 }
 
 /** Insert a space and add its creator as a member, atomically (D1 batch). Returns the new id. */

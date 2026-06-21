@@ -5,7 +5,7 @@ import { deleteCookie, getSignedCookie, setSignedCookie } from 'hono/cookie'
 import { spaces, users } from '../db/schema'
 import { createSpace, toSessionUser } from '../db/repo'
 import { requireAuth } from '../middleware/auth'
-import { createGoogle, OAUTH_SCOPES } from '../lib/oauth'
+import { createGoogle, isGoogleEnabled, OAUTH_SCOPES } from '../lib/oauth'
 import { createCliToken, createSession, destroySession } from '../lib/session'
 import { RESERVED_SLUGS, slugifyHandle } from '../lib/slug'
 import type { AppEnv, Bindings, SessionUser } from '../types'
@@ -32,6 +32,7 @@ export const auth = new Hono<AppEnv>()
 // --- Browser OAuth ---
 
 auth.get('/google', async (c) => {
+  if (!isGoogleEnabled(c.env)) return c.notFound()
   const state = generateState()
   const codeVerifier = generateCodeVerifier()
   const next = safeNext(c.req.query('next')) // carried through the round-trip in the signed cookie
@@ -49,6 +50,7 @@ auth.get('/google', async (c) => {
 })
 
 auth.get('/callback', async (c) => {
+  if (!isGoogleEnabled(c.env)) return c.notFound()
   const code = c.req.query('code')
   const state = c.req.query('state')
   const stored = await getSignedCookie(c, c.env.SESSION_SECRET, OAUTH_COOKIE)
