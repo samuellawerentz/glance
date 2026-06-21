@@ -1,6 +1,9 @@
 import { Hono } from 'hono'
 import { secureHeaders } from 'hono/secure-headers'
 import { withDb } from './db/client'
+import { superadminExists } from './db/repo'
+import { buildPublicConfig } from './lib/bootstrap'
+import { isGoogleEnabled } from './lib/oauth'
 import { requireSameOrigin } from './middleware/auth'
 import { admin } from './routes/admin'
 import { auth } from './routes/auth'
@@ -41,6 +44,18 @@ app.use('/api/*', requireSameOrigin)
 app.use('/api/*', withDb)
 
 app.get('/api/health', (c) => c.json({ status: 'ok' }))
+
+// Public first-run config: what login options the SPA should offer. Behind requireSameOrigin
+// + withDb (GET same-origin is fine); exposes only booleans, no secrets.
+app.get('/api/config', async (c) =>
+  c.json(
+    buildPublicConfig({
+      googleEnabled: isGoogleEnabled(c.env),
+      hasSuperadmin: await superadminExists(c.get('db')),
+      bootstrapTokenSet: Boolean(c.env.BOOTSTRAP_TOKEN),
+    }),
+  ),
+)
 app.route('/api/auth', auth)
 app.route('/api/spaces', spaces)
 app.route('/api/sites', sites)

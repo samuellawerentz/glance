@@ -2,12 +2,12 @@ import { decodeIdToken, generateCodeVerifier, generateState } from 'arctic'
 import { eq } from 'drizzle-orm'
 import { Hono } from 'hono'
 import { deleteCookie, getSignedCookie, setSignedCookie } from 'hono/cookie'
-import { spaces, users } from '../db/schema'
-import { createSpace, toSessionUser } from '../db/repo'
+import { users } from '../db/schema'
+import { bootstrapSuperadminByEmail, createPersonalSpace, superadminStatus, toSessionUser } from '../db/repo'
 import { requireAuth } from '../middleware/auth'
+import { bootstrapDecision } from '../lib/bootstrap'
 import { createGoogle, isGoogleEnabled, OAUTH_SCOPES } from '../lib/oauth'
 import { createCliToken, createSession, destroySession } from '../lib/session'
-import { RESERVED_SLUGS, slugifyHandle } from '../lib/slug'
 import type { AppEnv, Bindings, SessionUser } from '../types'
 
 const OAUTH_COOKIE = 'glance_oauth'
@@ -106,6 +106,38 @@ auth.post('/dev-login', async (c) => {
   return c.json({ ok: true, user })
 })
 
+// --- First-run bootstrap (token-gated, no Google) ---
+// Establishes the first superadmin on a fresh deploy. Inert (404) until BOOTSTRAP_TOKEN
+// is set. The token rides in the POST body (never the URL — query strings leak via logs,
+// history, and Referer). On first run there is no session cookie, so middleware
+// `requireSameOrigin` is a no-op; this route does its OWN same-origin check.
+
+auth.post('/bootstrap', async (c) => {
+  const appOrigin = new URL(c.env.APP_URL).origin
+  const sameOrigin = c.req.header('Origin') === appOrigin || c.req.header('Sec-Fetch-Site') === 'same-origin'
+  if (!sameOrigin) return c.json({ error: 'csrf' }, 403)
+
+  // One-shot lifetime op: a tighter window than the CLI default brakes token brute-force.
+  const ip = c.req.header('CF-Connecting-IP') ?? 'unknown'
+  if (await isCliStartRateLimited(c.env.GLANCE_SESSIONS, `bootstrap:${ip}`, 5, 3600))
+    return c.json({ error: 'rate_limited' }, 429)
+
+  const body = await c.req.json<{ token?: string }>().catch(() => ({}) as { token?: string })
+  const db = c.get('db')
+  const decision = await bootstrapDecision({
+    expectedToken: c.env.BOOTSTRAP_TOKEN,
+    providedToken: body.token,
+    status: () => superadminStatus(db, c.env.SUPERADMIN_EMAIL),
+  })
+  if (!decision.ok) return c.json({ error: 'bootstrap_unavailable' }, decision.status)
+
+  // Session (KV) is confirmed before the run is "done"; the idempotent decision lets a
+  // retry recover if KV write failed mid-way without re-locking the deploy.
+  const user = await bootstrapSuperadminByEmail(db, c.env.SUPERADMIN_EMAIL, null)
+  await createSession(c, user)
+  return c.json({ ok: true, user })
+})
+
 // --- CLI device-poll token flow ---
 // CLI: POST /cli/start → open verificationUri in browser + poll /cli/poll.
 // Browser (authed) confirms via POST /cli/approve → mints a 30-day CLI token.
@@ -194,7 +226,9 @@ auth.post('/cli/approve', requireAuth, async (c) => {
 
 // --- helpers ---
 
-async function findOrCreateUser(
+// Exported for characterization tests. Matches by googleId then email, so a Google login
+// backfills onto a prior bootstrap user (googleId null, same email) without changing role.
+export async function findOrCreateUser(
   db: AppEnv['Variables']['db'],
   env: Bindings,
   claims: GoogleClaims,
@@ -214,16 +248,4 @@ async function findOrCreateUser(
   await db.insert(users).values({ id, email, name: claims.name ?? null, googleId: claims.sub, role })
   await createPersonalSpace(db, id, email)
   return { id, email, name: claims.name ?? null, role }
-}
-
-async function createPersonalSpace(db: AppEnv['Variables']['db'], userId: string, email: string): Promise<void> {
-  let base = slugifyHandle(email)
-  if (RESERVED_SLUGS.has(base)) base = `${base}-1`
-  let slug = base
-  for (let i = 1; i <= 25; i++) {
-    const taken = await db.select({ id: spaces.id }).from(spaces).where(eq(spaces.slug, slug)).limit(1)
-    if (taken.length === 0) break
-    slug = `${base}-${i}`
-  }
-  await createSpace(db, { slug, name: email.split('@')[0] ?? slug, type: 'personal', createdBy: userId })
 }
