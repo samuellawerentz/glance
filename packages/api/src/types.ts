@@ -8,8 +8,11 @@ export interface Bindings {
   GLANCE_SESSIONS: KVNamespace
   ASSETS: Fetcher
   UPLOAD_LIMITER?: RateLimit
-  GOOGLE_CLIENT_ID: string
-  GOOGLE_CLIENT_SECRET: string
+  // Optional: when unset, Google OAuth routes are inert (404) and login is bootstrap-only.
+  GOOGLE_CLIENT_ID?: string
+  GOOGLE_CLIENT_SECRET?: string
+  // Optional one-shot secret gating first-superadmin bootstrap. Unset → bootstrap inert (404).
+  BOOTSTRAP_TOKEN?: string
   SESSION_SECRET: string
   CONTENT_TOKEN_SECRET: string
   APP_URL: string

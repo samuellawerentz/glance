@@ -3,8 +3,13 @@
 
 # Google OAuth (console.cloud.google.com → Credentials). Dev redirect URI:
 #   http://localhost:8787/api/auth/callback
+# OPTIONAL: leave empty to run bootstrap-only (no Google) until you wire OAuth later.
 GOOGLE_CLIENT_ID=""
 GOOGLE_CLIENT_SECRET=""
+
+# One-shot token gating first-superadmin bootstrap (POST /api/auth/bootstrap).
+# Leave empty to disable bootstrap. Generate: openssl rand -hex 32
+BOOTSTRAP_TOKEN=""
 
 # HMAC secret for signed cookies and KV session tokens.
 # Generate: openssl rand -hex 32

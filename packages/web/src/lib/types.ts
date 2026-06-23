@@ -10,6 +10,12 @@ export interface Me {
   role: 'member' | 'superadmin'
 }
 
+// GET /api/config — public first-run config driving which login options the page offers.
+export interface PublicConfig {
+  googleEnabled: boolean
+  bootstrapAvailable: boolean
+}
+
 export interface SpaceSummary {
   id: string
   slug: string

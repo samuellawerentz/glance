@@ -5,5 +5,5 @@
     "types": []
   },
   "include": ["src/**/*.ts", "worker-configuration.d.ts", "drizzle.config.ts"],
-  "exclude": ["src/**/*.test.ts"]
+  "exclude": ["src/**/*.test.ts", "src/test/**"]
 }
