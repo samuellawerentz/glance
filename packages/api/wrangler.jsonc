@@ -2,17 +2,17 @@
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "glance",
   "main": "src/index.ts",
-  "account_id": "YOUR_CLOUDFLARE_ACCOUNT_ID", // EDIT: replace with your own (see README)
+  "account_id": "ca22d0c49bf0a23bfb59a35dfe495fab", // EDIT: replace with your own (see README)
   "compatibility_date": "2026-06-01",
   "compatibility_flags": ["nodejs_compat"],
   "workers_dev": true,
   "observability": { "enabled": true },
   // Non-secret config. Secrets (GOOGLE_CLIENT_ID/SECRET, SESSION_SECRET) via `wrangler secret put`.
   "vars": {
-    "APP_URL": "https://glance.YOUR-SUBDOMAIN.workers.dev", // EDIT: replace with your own (see README)
-    "CONTENT_URL": "https://glance-content.YOUR-SUBDOMAIN.workers.dev", // EDIT: replace with your own (see README)
-    "ALLOWED_HD": "example.com", // EDIT: replace with your own (see README)
-    "SUPERADMIN_EMAIL": "you@example.com" // EDIT: replace with your own (see README)
+    "APP_URL": "https://glance.samuel-lawerence.workers.dev", // EDIT: replace with your own (see README)
+    "CONTENT_URL": "https://glance-content.samuel-lawerence.workers.dev", // EDIT: replace with your own (see README)
+    "ALLOWED_HD": "plivo.com", // EDIT: replace with your own (see README)
+    "SUPERADMIN_EMAIL": "samuel.lawerence@plivo.com" // EDIT: replace with your own (see README)
   },
   // Main worker serves the React SPA as static assets. run_worker_first forces
   // /api/* to Hono BEFORE the asset layer (otherwise SPA fallback returns index.html
@@ -28,12 +28,12 @@
     {
       "binding": "GLANCE_DB",
       "database_name": "glance-db",
-      "database_id": "YOUR_D1_DATABASE_ID", // EDIT: replace with your own (see README)
+      "database_id": "a2aff94f-0c90-4089-9d60-4625da3ad979", // EDIT: replace with your own (see README)
       "migrations_dir": "drizzle"
     }
   ],
   "r2_buckets": [{ "binding": "GLANCE_FILES", "bucket_name": "glance-files" }],
-  "kv_namespaces": [{ "binding": "GLANCE_SESSIONS", "id": "YOUR_KV_NAMESPACE_ID" }], // EDIT: replace with your own (see README)
+  "kv_namespaces": [{ "binding": "GLANCE_SESSIONS", "id": "b7e8ae6b96ce4b2daa0c7d223c1cf1dd" }], // EDIT: replace with your own (see README)
   // Free, no Cloudflare zone needed (unlike WAF rules, which don't apply to *.workers.dev).
   // 10 upload requests / 60s per client IP. period must be 10 or 60.
   "ratelimits": [{ "name": "UPLOAD_LIMITER", "namespace_id": "1001", "simple": { "limit": 10, "period": 60 } }]
