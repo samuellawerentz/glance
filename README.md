@@ -155,11 +155,18 @@ The `glance` CLI uploads local folders straight from the terminal.
 ### Install
 
 ```bash
-# from the repo
+# one-liner — downloads the standalone binary for your platform (no Bun/Node needed)
+curl -fsSL https://raw.githubusercontent.com/samuellawerentz/glance/main/install.sh | sh
+```
+
+It installs to `~/.local/bin/glance`. Override the target with `GLANCE_INSTALL_DIR`.
+
+From a clone instead:
+
+```bash
 cd packages/cli
 bun link          # makes `glance` available globally via bun's bin linking
-
-# or install directly
+# or
 bun install -g .
 ```
 
