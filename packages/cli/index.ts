@@ -2,7 +2,7 @@
 import { spawn } from 'node:child_process'
 import { mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { homedir, platform } from 'node:os'
-import { join, relative, resolve, sep } from 'node:path'
+import { basename, join, relative, resolve, sep } from 'node:path'
 import { createInterface } from 'node:readline/promises'
 
 // Glance CLI — deploy folders to Glance from the terminal.
@@ -61,6 +61,29 @@ function parseArgs(argv: string[]): { positional: string[]; flags: Record<string
     }
   }
   return { positional, flags }
+}
+
+// Derive a Glance site slug from a file/folder name. Mirrors the server's rule
+// (api lib/slug.ts): lowercase alphanumeric + hyphens, 3–40 chars, no edge hyphen.
+const SLUG_RE = /^[a-z0-9](?:[a-z0-9-]{1,38}[a-z0-9])$/
+function slugify(raw: string): string {
+  return raw
+    .toLowerCase()
+    .replace(/[^a-z0-9-]+/g, '-')
+    .replace(/-{2,}/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 40)
+    .replace(/-+$/g, '')
+}
+
+// The caller's personal space — the default target when --space is omitted.
+async function personalSpace(cfg: Config): Promise<string> {
+  const res = await authed(cfg, '/api/spaces/mine')
+  if (!res.ok) die(`Could not resolve your space (${res.status}). Pass --space <slug>.`)
+  const spaces = (await res.json()) as { slug: string; type: string }[]
+  const space = spaces.find((s) => s.type === 'personal') ?? spaces[0]
+  if (!space) die('No space found for your account. Pass --space <slug>.')
+  return space.slug
 }
 
 function walk(dir: string, base = dir): string[] {
@@ -129,35 +152,55 @@ async function login(): Promise<void> {
 async function deploy(argv: string[]): Promise<void> {
   const { positional, flags } = parseArgs(argv)
   const path = positional[0]
-  const space = flags.space
-  const name = flags.name
   const visibility = flags.visibility ?? 'team'
-  if (!path || !space || !name) die('Usage: glance deploy <path> --space <slug> --name <slug> [--visibility team|public|private|group]')
+  if (!path) die('Usage: glance deploy <path> [--space <slug>] [--name <slug>] [--visibility team|public|private|group]')
 
   const cfg = requireAuth()
   const root = resolve(path)
-  if (!statSync(root).isDirectory()) die(`Not a directory: ${root}`)
+  let isDir = false
+  try {
+    isDir = statSync(root).isDirectory()
+  } catch {
+    die(`No such file or directory: ${root}`)
+  }
+
+  // Accept a single file OR a folder. A lone file uploads under its own name and is
+  // served at the site root (the content worker falls back to the only file).
+  let entries: { abs: string; rel: string }[]
+  let derived: string
+  if (isDir) {
+    entries = walk(root).map((abs) => ({ abs, rel: relative(root, abs).split(sep).join('/') }))
+    derived = basename(root) // default name = folder name
+  } else {
+    entries = [{ abs: root, rel: basename(root) }]
+    derived = basename(root).replace(/\.[^.]+$/, '') // default name = file name, sans extension
+  }
+  if (entries.length === 0) die('No files to upload.')
+
+  // Name defaults to the file/folder name; space defaults to your personal space.
+  const name = flags.name ?? slugify(derived)
+  if (!SLUG_RE.test(name)) {
+    die(`Couldn't derive a valid name from "${basename(root)}". Pass --name <slug> (lowercase, 3–40 chars).`)
+  }
+  const space = flags.space ?? (await personalSpace(cfg))
 
   // Replace prompt if the site already exists and the caller owns it.
   const exists = await authed(cfg, `/api/sites/${space}/${name}/exists`)
   const ex = (await exists.json()) as { exists: boolean; owned?: boolean }
   let replace = false
   if (ex.exists) {
-    if (!ex.owned) die(`glance.../${space}/${name} is taken by another user.`)
+    if (!ex.owned) die(`${space}/${name} is taken by another user.`)
     const ans = await prompt(`Site exists at ${space}/${name}. Replace? (y/N) `)
     if (ans.toLowerCase() !== 'y') return console.log('Cancelled.')
     replace = true
   }
 
-  const files = walk(root)
-  if (files.length === 0) die('No files to upload.')
   const form = new FormData()
   form.append('visibility', visibility)
-  for (const abs of files) {
-    const rel = relative(root, abs).split(sep).join('/')
+  for (const { abs, rel } of entries) {
     form.append('files', new Blob([readFileSync(abs)]), rel)
   }
-  console.log(`Uploading ${files.length} file(s)…`)
+  console.log(`Uploading ${entries.length} file(s) to ${space}/${name}…`)
   const res = await authed(cfg, `/api/upload/${space}/${name}${replace ? '?replace=true' : ''}`, {
     method: 'POST',
     body: form,
@@ -211,7 +254,7 @@ const run = commands[cmd ?? '']
 if (!run) {
   console.log('glance — deploy folders to Glance\n')
   console.log('  glance login')
-  console.log('  glance deploy <path> --space <slug> --name <slug> [--visibility team|public|private|group]')
+  console.log('  glance deploy <path> [--space <slug>] [--name <slug>] [--visibility team|public|private|group]')
   console.log('  glance list')
   console.log('  glance delete <space/slug>')
   console.log('  glance logout')

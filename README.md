@@ -194,7 +194,7 @@ bun install -g .
 
 ```
 glance login
-glance deploy <path> --space <slug> --name <slug> [--visibility team|public|private|group]
+glance deploy <path> [--space <slug>] [--name <slug>] [--visibility team|public|private|group]
 glance list
 glance delete <space/slug>
 glance logout
@@ -203,20 +203,29 @@ glance logout
 | command | what it does |
 |---|---|
 | `login` | device-code flow — opens a browser, polls until approved, saves token to `~/.glance/config.json` |
-| `deploy <path>` | uploads all files in `<path>` (walks recursively, skips `.git`/`node_modules`) |
+| `deploy <path>` | `<path>` is a **file or a folder**. A folder uploads recursively (skips `.git`/`node_modules`); a lone file uploads on its own and renders at the site root |
 | `list` | shows your sites with visibility and URL |
 | `delete <space/slug>` | prompts for confirmation, then deletes |
 | `logout` | revokes the server-side session and removes the local token |
+
+The shortest deploy is just a path — `glance deploy report.html` publishes to your personal space at
+`/<you>/report`:
+
+```bash
+glance deploy report.html                      # name=report, space=your personal space
+glance deploy ./dist --space team --name docs   # folder, explicit space + name
+```
 
 **deploy flags**
 
 | flag | required | default |
 |---|---|---|
-| `--space <slug>` | yes | — |
-| `--name <slug>` | yes | — |
+| `--space <slug>` | no | your **personal** space |
+| `--name <slug>` | no | the file name (sans extension) or folder name, slugified |
 | `--visibility` | no | `team` |
 
-Visibility values: `team` · `public` · `private` · `group`.
+Visibility values: `team` · `public` · `private` · `group`. If a name can't be derived into a valid
+slug (e.g. too short or all-symbols), the CLI asks you to pass `--name`.
 
 ### Pointing the CLI at a self-hosted instance
 

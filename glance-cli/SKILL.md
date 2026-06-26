@@ -33,7 +33,7 @@ Put it in your shell profile to make it permanent. Token + URL are saved to `~/.
 | command | what it does |
 |---|---|
 | `glance login` | device-code flow: prints a URL + code, opens a browser, polls until you approve, saves the token |
-| `glance deploy <path> --space <slug> --name <slug> [--visibility team\|public\|private\|group]` | uploads every file under `<path>` |
+| `glance deploy <path> [--space <slug>] [--name <slug>] [--visibility team\|public\|private\|group]` | uploads a file or a folder |
 | `glance list` | lists your sites — `space/slug  visibility  url` |
 | `glance delete <space/slug>` | confirms (y/N), then deletes |
 | `glance logout` | revokes the server session and removes the local token |
@@ -42,12 +42,17 @@ Put it in your shell profile to make it permanent. Token + URL are saved to `~/.
 Device-code flow. If no browser opener is available (SSH/headless), open the printed URL and enter the code manually. Must run before any authed command — others fail with "Not logged in."
 
 ### deploy
-- `<path>`, `--space`, `--name` are all **required**; `--visibility` defaults to `team`.
-- Walks `<path>` recursively, skipping `.git`, `node_modules`, `.DS_Store`. Relative paths are preserved as the site's file layout.
-- If `space/slug` already exists and you own it, prompts `Replace? (y/N)`. If it's owned by someone else, it aborts.
+- `<path>` is the only required arg — it can be a **single file** or a **folder**.
+  - **File**: uploads just that file; it renders at the site root (e.g. `glance deploy report.html`).
+  - **Folder**: walks recursively, skipping `.git`, `node_modules`, `.DS_Store`; relative paths become the site's layout.
+- `--name` defaults to the **file name (sans extension)** or **folder name**, slugified. Pass `--name` to override (required if the derived name isn't a valid slug — lowercase, 3–40 chars).
+- `--space` defaults to your **personal space**. Pass `--space` to target a team/group space.
+- `--visibility` defaults to `team`.
+- If the site already exists and you own it, prompts `Replace? (y/N)`. If owned by someone else, it aborts.
 - Prints `✓ Deployed → <url>`.
 
 ```bash
+glance deploy report.html                                  # → /<you>/report in your personal space
 glance deploy ./dist --space docs --name api-reference --visibility public
 ```
 
