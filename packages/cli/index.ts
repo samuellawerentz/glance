@@ -8,7 +8,7 @@ import { createInterface } from 'node:readline/promises'
 // Glance CLI — deploy folders to Glance from the terminal.
 //   glance login | deploy <path> --space <s> --name <s> [--visibility v] | list | delete <space/slug> | logout
 
-const API = process.env.GLANCE_API_URL ?? 'http://localhost:8787'
+const API = process.env.GLANCE_API_URL ?? 'https://glance.samuel-lawerence.workers.dev'
 const CONFIG_DIR = join(homedir(), '.glance')
 const CONFIG_PATH = join(CONFIG_DIR, 'config.json')
 
