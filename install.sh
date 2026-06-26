@@ -34,6 +34,10 @@ main() {
         add_to_path "$INSTALL_DIR"
     fi
 
+    if [ -n "${GLANCE_API_URL:-}" ]; then
+        persist_api_url "$GLANCE_API_URL"
+    fi
+
     say ""
     say "Done! Run 'glance login' to get started."
 }
@@ -96,16 +100,19 @@ verify_checksum() {
     say "Checksum verified"
 }
 
+detect_profile() {
+    if [ -n "${ZSH_VERSION:-}" ] || [ -f "$HOME/.zshrc" ]; then
+        echo "$HOME/.zshrc"
+    elif [ -f "$HOME/.bashrc" ]; then
+        echo "$HOME/.bashrc"
+    elif [ -f "$HOME/.profile" ]; then
+        echo "$HOME/.profile"
+    fi
+}
+
 add_to_path() {
     dir="$1"
-    profile=""
-    if [ -n "${ZSH_VERSION:-}" ] || [ -f "$HOME/.zshrc" ]; then
-        profile="$HOME/.zshrc"
-    elif [ -f "$HOME/.bashrc" ]; then
-        profile="$HOME/.bashrc"
-    elif [ -f "$HOME/.profile" ]; then
-        profile="$HOME/.profile"
-    fi
+    profile="$(detect_profile)"
     if [ -n "$profile" ]; then
         if ! grep -qF "$dir" "$profile" 2>/dev/null; then
             echo "" >> "$profile"
@@ -115,6 +122,23 @@ add_to_path() {
         fi
     else
         say "Add this to your shell profile: export PATH=\"${dir}:\$PATH\""
+    fi
+}
+
+persist_api_url() {
+    url="$1"
+    profile="$(detect_profile)"
+    if [ -n "$profile" ]; then
+        if grep -q "export GLANCE_API_URL=" "$profile" 2>/dev/null; then
+            warn "GLANCE_API_URL already set in $profile — leaving it as-is"
+        else
+            echo "" >> "$profile"
+            echo "# Added by glance installer" >> "$profile"
+            echo "export GLANCE_API_URL=\"${url}\"" >> "$profile"
+            say "Set GLANCE_API_URL=$url in $profile — restart your shell or run: source $profile"
+        fi
+    else
+        say "Add this to your shell profile: export GLANCE_API_URL=\"${url}\""
     fi
 }
 

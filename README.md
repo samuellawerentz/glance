@@ -161,6 +161,18 @@ curl -fsSL https://raw.githubusercontent.com/samuellawerentz/glance/main/install
 
 It installs to `~/.local/bin/glance`. Override the target with `GLANCE_INSTALL_DIR`.
 
+**Pointing teammates at your instance in one shot.** Pass `GLANCE_API_URL` to the installer and it
+persists `export GLANCE_API_URL=...` into their shell profile, so `glance` targets your deployment
+with no extra step. Send teammates exactly this (with your subdomain filled in):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/samuellawerentz/glance/main/install.sh \
+  | GLANCE_API_URL=https://glance.your-subdomain.workers.dev sh
+```
+
+They open a new shell, run `glance login` (Google SSO), and start deploying. Without
+`GLANCE_API_URL` the CLI defaults to `http://localhost:8787`.
+
 From a clone instead:
 
 ```bash
