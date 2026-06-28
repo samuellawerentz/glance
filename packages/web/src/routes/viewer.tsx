@@ -4,6 +4,7 @@ import { api, ApiError } from '@/lib/api'
 import { toLogin } from '@/lib/nav'
 import type { ViewerSite } from '@/lib/types'
 import { Spinner } from '@/components/states'
+import { PreviewToolbar } from '@/components/PreviewToolbar'
 
 export async function loader({ params, request }: LoaderFunctionArgs) {
   try {
@@ -30,6 +31,7 @@ export function Component() {
         onLoad={() => setLoaded(true)}
         sandbox="allow-scripts allow-same-origin allow-popups allow-forms"
       />
+      <PreviewToolbar site={site} />
       {!loaded && (
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-background text-muted-foreground">
           <Spinner className="size-6" />
