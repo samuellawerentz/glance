@@ -1,5 +1,5 @@
 import { and, eq } from 'drizzle-orm'
-import { drizzle } from 'drizzle-orm/d1'
+import { type DrizzleD1Database, drizzle } from 'drizzle-orm/d1'
 import { type Context, Hono } from 'hono'
 import { Marked } from 'marked'
 import { isSpaceMember, resolveIsShared, toSessionUser } from './db/repo'
@@ -8,13 +8,29 @@ import { checkAccess } from './lib/access'
 import { verifyToken } from './lib/token'
 import type { Bindings } from './types'
 
-type Ctx = Context<{ Bindings: Bindings }>
+// `db` is optional: production runs no middleware that sets it, so getDb() falls back to a
+// request-scoped client built from the D1 binding; tests inject the in-memory harness db.
+type ContentEnv = { Bindings: Bindings; Variables: { db?: DrizzleD1Database } }
+type Ctx = Context<ContentEnv>
 
 // Content worker (glance-content.<acct>.workers.dev): streams uploaded file bytes from
 // R2. Separate origin so untrusted uploaded HTML/JS can never reach the main app's
 // session cookie. Gated sites carry an HMAC token IN THE PATH (/_t/<token>/...) so
 // relative sub-resources inherit it without cookies — survives 3rd-party-cookie blocking.
-const app = new Hono<{ Bindings: Bindings }>()
+const app = new Hono<ContentEnv>()
+
+// Per-request drizzle client. The D1 binding is request-scoped, so the client must not be
+// memoized across requests; tests inject a harness db via c.set('db').
+function getDb(c: Ctx): DrizzleD1Database {
+  return c.get('db') ?? drizzle(c.env.GLANCE_DB)
+}
+
+// A 404 on the content origin must never be cached. Right after an upload a read can miss
+// transiently (edge/timing); a cached 404 would then outlive the miss and strand a freshly
+// published site. `no-store` keeps every not-found re-checked against live state.
+function notFound(c: Ctx): Response {
+  return c.text('404 Not Found', 404, { 'cache-control': 'no-store' })
+}
 
 app.get('/', (c) => c.text('Glance content origin', 200))
 
@@ -34,7 +50,7 @@ app.get('/:space/:site/*', (c) => serve(c, c.req.param('space'), c.req.param('si
 
 // `userId` is the token-bound viewer for gated requests, or null for public requests.
 async function serve(c: Ctx, spaceSlug: string, siteSlug: string, rest: string, userId: string | null): Promise<Response> {
-  const db = drizzle(c.env.GLANCE_DB)
+  const db = getDb(c)
   const siteRow = (
     await db
       .select({
@@ -49,7 +65,7 @@ async function serve(c: Ctx, spaceSlug: string, siteSlug: string, rest: string, 
       .where(and(eq(spaces.slug, spaceSlug), eq(sites.slug, siteSlug)))
       .limit(1)
   )[0]
-  if (!siteRow) return c.notFound()
+  if (!siteRow) return notFound(c)
   if (siteRow.status === 'archived') return c.text('This site has been archived', 410)
 
   if (userId === null) {
@@ -84,10 +100,10 @@ async function serve(c: Ctx, spaceSlug: string, siteSlug: string, rest: string, 
     const all = await db.select(cols).from(files).where(eq(files.siteId, siteRow.id)).limit(2)
     if (all.length === 1) file = all[0]
   }
-  if (!file) return c.notFound()
+  if (!file) return notFound(c)
 
   const object = await c.env.GLANCE_FILES.get(file.storageKey)
-  if (!object) return c.notFound()
+  if (!object) return notFound(c)
 
   const frameAncestors = `frame-ancestors 'self' ${c.env.APP_URL}`
 

@@ -1,7 +1,10 @@
 import { describe, expect, test } from 'bun:test'
-import { contentType, markdown, normalizePath, restOf } from './content'
+import { Hono } from 'hono'
+import contentApp, { contentType, markdown, normalizePath, restOf } from './content'
+import { sites, spaces, users } from './db/schema'
 import { sanitizePath } from './lib/storage'
 import { signToken, verifyToken } from './lib/token'
+import { makeDb } from './test/harness'
 
 const secret = 'test-secret'
 const userId = 'user-123'
@@ -112,6 +115,41 @@ describe('sanitizePath (upload-time R2 key hardening)', () => {
   test('normalizes backslashes and drops empty segments', () => {
     expect(sanitizePath('a\\b\\c')).toBe('a/b/c')
     expect(sanitizePath('a//b')).toBe('a/b')
+  })
+})
+
+describe('content 404s carry Cache-Control: no-store', () => {
+  // Mount the real content app under a wrapper that injects the in-memory harness db, so
+  // serve()'s D1 reads run against real SQLite. The two cases here return BEFORE any R2
+  // access, so no GLANCE_FILES mock is needed (S-D only).
+  function setup() {
+    const db = makeDb()
+    const app = new Hono()
+    app.use('*', async (c, next) => {
+      c.set('db', db)
+      await next()
+    })
+    app.route('/', contentApp)
+    return { app, db, env: { APP_URL: 'https://glance.example.com' } }
+  }
+
+  test('content-missing-site-404-no-store: unknown space/site → 404 + no-store, before any R2 access', async () => {
+    const { app, env } = setup()
+    const res = await app.request('/nope/nope/', {}, env)
+    expect(res.status).toBe(404)
+    expect(res.headers.get('cache-control')).toBe('no-store')
+  })
+
+  test('content-missing-file-404-no-store: public site, zero files → 404 + no-store, before R2.get', async () => {
+    const { app, db, env } = setup()
+    await db.insert(users).values({ id: 'u1', email: 'o@example.com', role: 'member' })
+    await db.insert(spaces).values({ id: 's1', slug: 'sam', name: 'Sam', type: 'personal', createdBy: 'u1' })
+    await db
+      .insert(sites)
+      .values({ id: 'site1', spaceId: 's1', slug: 'site', visibility: 'public', status: 'active', ownerId: 'u1' })
+    const res = await app.request('/sam/site/', {}, env)
+    expect(res.status).toBe(404)
+    expect(res.headers.get('cache-control')).toBe('no-store')
   })
 })
 
