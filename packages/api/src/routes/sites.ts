@@ -1,6 +1,13 @@
-import { and, desc, eq, inArray } from 'drizzle-orm'
+import { and, desc, eq, inArray, or, sql } from 'drizzle-orm'
 import { Hono } from 'hono'
-import { isSpaceMember, listSiteShares, replaceSiteShares, resolveIsShared, sharedSiteIds } from '../db/repo'
+import {
+  isSpaceMember,
+  listSiteShares,
+  memberSpaceIds,
+  replaceSiteShares,
+  resolveIsShared,
+  sharedSiteIds,
+} from '../db/repo'
 import type { Visibility } from '../db/schema'
 import { sites as sitesTable, spaces, users } from '../db/schema'
 import { checkAccess } from '../lib/access'
@@ -9,7 +16,7 @@ import { isValidSlug } from '../lib/slug'
 import { deleteSiteObjects } from '../lib/storage'
 import { signToken } from '../lib/token'
 import { requireAuth } from '../middleware/auth'
-import type { AppEnv } from '../types'
+import type { AppEnv, SessionUser } from '../types'
 
 // Phase 4: site CRUD + viewer metadata. Mounted at /api/sites.
 
@@ -41,6 +48,73 @@ async function resolveSite(db: AppEnv['Variables']['db'], spaceSlug: string, sit
     .where(and(eq(spaces.slug, spaceSlug), eq(sitesTable.slug, siteSlug)))
     .limit(1)
   return rows[0] ?? null
+}
+
+// Over-fetch a little past the result cap so the in-memory checkAccess pass can drop a few
+// non-openable candidates and still fill the cap.
+const SEARCH_SCAN_CAP = 200
+
+export type SearchRow = {
+  id: string
+  spaceId: string
+  spaceSlug: string
+  siteSlug: string
+  title: string | null
+  visibility: Visibility
+  status: 'active' | 'archived'
+  ownerId: string
+  createdAt: string
+}
+
+/**
+ * cmdk site search. ONE bounded candidate query over *active* sites the caller might open
+ * (owner / member-space / team|public / explicitly-shared; superadmin ⇒ all active), then a
+ * final in-memory checkAccess pass — the single source of truth — using precomputed
+ * membership/share sets so it stays O(rows), not N+1. "Openable" semantics: the result is
+ * exactly what checkAccess admits. q matches site title/slug or its space slug/name.
+ */
+export async function searchSites(
+  db: AppEnv['Variables']['db'],
+  user: SessionUser,
+  q: string,
+  limit = 20,
+): Promise<SearchRow[]> {
+  const term = `%${q.trim().toLowerCase()}%`
+  const qMatch = sql`(lower(${sitesTable.title}) like ${term} or lower(${sitesTable.slug}) like ${term} or lower(${spaces.slug}) like ${term} or lower(${spaces.name}) like ${term})`
+
+  const isSuper = user.role === 'superadmin'
+  const memberSpaces = isSuper ? new Set<string>() : await memberSpaceIds(db, user.id)
+  const shared = isSuper ? new Set<string>() : await sharedSiteIds(db, user.id)
+
+  let where = and(eq(sitesTable.status, 'active'), qMatch)
+  if (!isSuper) {
+    const reach = [eq(sitesTable.ownerId, user.id), inArray(sitesTable.visibility, ['team', 'public'])]
+    if (memberSpaces.size) reach.push(inArray(sitesTable.spaceId, [...memberSpaces]))
+    if (shared.size) reach.push(inArray(sitesTable.id, [...shared]))
+    where = and(where, or(...reach))
+  }
+
+  const rows = await db
+    .select({
+      id: sitesTable.id,
+      spaceId: sitesTable.spaceId,
+      spaceSlug: spaces.slug,
+      siteSlug: sitesTable.slug,
+      title: sitesTable.title,
+      visibility: sitesTable.visibility,
+      status: sitesTable.status,
+      ownerId: sitesTable.ownerId,
+      createdAt: sitesTable.createdAt,
+    })
+    .from(sitesTable)
+    .innerJoin(spaces, eq(sitesTable.spaceId, spaces.id))
+    .where(where)
+    .orderBy(desc(sitesTable.createdAt))
+    .limit(SEARCH_SCAN_CAP)
+
+  return rows
+    .filter((r) => checkAccess(r, user, memberSpaces.has(r.spaceId), shared.has(r.id)).ok)
+    .slice(0, limit)
 }
 
 // POST /api/sites — create an empty site in a space the caller belongs to.
@@ -200,6 +274,29 @@ sites.get('/team', requireAuth, async (c) => {
       createdAt: r.createdAt,
       uploaderName: r.uploaderName,
       uploaderEmail: r.uploaderEmail,
+    })),
+  )
+})
+
+// GET /api/sites/search?q= — cmdk search across every site the caller can open (all tiers,
+// not just the 6 most-recent owned). Empty q → []. 1-segment path, no catch-all collision.
+sites.get('/search', requireAuth, async (c) => {
+  const user = c.get('user')
+  const db = c.get('db')
+  const q = (c.req.query('q') ?? '').trim()
+  if (!q) return c.json([])
+  const rows = await searchSites(db, user, q)
+  return c.json(
+    rows.map((r) => ({
+      id: r.id,
+      spaceSlug: r.spaceSlug,
+      siteSlug: r.siteSlug,
+      title: r.title,
+      visibility: r.visibility,
+      status: r.status,
+      isOwner: r.ownerId === user.id,
+      url: `${c.env.APP_URL}/${r.spaceSlug}/${r.siteSlug}`,
+      createdAt: r.createdAt,
     })),
   )
 })

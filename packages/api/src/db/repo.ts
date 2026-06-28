@@ -115,6 +115,15 @@ export async function resolveIsShared(db: DrizzleD1Database, siteId: string, use
   return viaGroup.length > 0
 }
 
+/** Set of space ids the user is a member of (mirrors `sharedSiteIds` for the search candidate query). */
+export async function memberSpaceIds(db: DrizzleD1Database, userId: string): Promise<Set<string>> {
+  const rows = await db
+    .select({ spaceId: spaceMembers.spaceId })
+    .from(spaceMembers)
+    .where(eq(spaceMembers.userId, userId))
+  return new Set(rows.map((r) => r.spaceId))
+}
+
 /** Set of site ids explicitly shared with the user (direct + via group membership). */
 export async function sharedSiteIds(db: DrizzleD1Database, userId: string): Promise<Set<string>> {
   const direct = await db

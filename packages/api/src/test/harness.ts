@@ -7,6 +7,17 @@ import { join } from 'node:path'
 import { Database } from 'bun:sqlite'
 import { drizzle } from 'drizzle-orm/bun-sqlite'
 import type { DrizzleD1Database } from 'drizzle-orm/d1'
+import {
+  type NewSite,
+  type NewSpace,
+  type NewUser,
+  siteGroupShares,
+  siteUserShares,
+  sites,
+  spaceMembers,
+  spaces,
+  users,
+} from '../db/schema'
 
 const MIGRATIONS = ['drizzle/0000_init.sql', 'drizzle/0001_steep_black_bolt.sql']
 
@@ -31,6 +42,61 @@ export function makeDb(): DrizzleD1Database {
     return out
   }
   return db
+}
+
+// --- S-SEED: minimal row inserts so route/search specs are authorable. Test-only,
+// behavior-preserving; every field defaults to something sensible and overridable. ---
+
+let seedSeq = 0
+const nextId = (prefix: string) => `${prefix}-${++seedSeq}`
+
+/** Insert a user; returns its id. Defaults: member role, derived email. */
+export async function seedUser(db: DrizzleD1Database, o: Partial<NewUser> = {}): Promise<string> {
+  const id = o.id ?? nextId('u')
+  await db.insert(users).values({ id, email: o.email ?? `${id}@example.com`, name: o.name ?? null, role: o.role ?? 'member' })
+  return id
+}
+
+/** Insert a space; returns its id. Defaults: group type, slug/name derived from id. */
+export async function seedSpace(db: DrizzleD1Database, o: Partial<NewSpace> & { createdBy: string }): Promise<string> {
+  const id = o.id ?? nextId('sp')
+  await db
+    .insert(spaces)
+    .values({ id, slug: o.slug ?? id, name: o.name ?? id, type: o.type ?? 'group', createdBy: o.createdBy })
+  return id
+}
+
+/** Add a user to a space's membership. */
+export async function seedMember(db: DrizzleD1Database, spaceId: string, userId: string): Promise<void> {
+  await db.insert(spaceMembers).values({ spaceId, userId })
+}
+
+/** Insert a site; returns its id. Defaults: team visibility, active, slug derived from id. */
+export async function seedSite(
+  db: DrizzleD1Database,
+  o: Partial<NewSite> & { spaceId: string; ownerId: string },
+): Promise<string> {
+  const id = o.id ?? nextId('site')
+  await db.insert(sites).values({
+    id,
+    spaceId: o.spaceId,
+    ownerId: o.ownerId,
+    slug: o.slug ?? id,
+    title: o.title ?? null,
+    visibility: o.visibility ?? 'team',
+    status: o.status ?? 'active',
+  })
+  return id
+}
+
+/** Grant a user a direct (per-user) share on a site. */
+export async function seedUserShare(db: DrizzleD1Database, siteId: string, userId: string): Promise<void> {
+  await db.insert(siteUserShares).values({ siteId, userId })
+}
+
+/** Grant every member of a (group) space a share on a site. */
+export async function seedGroupShare(db: DrizzleD1Database, siteId: string, spaceId: string): Promise<void> {
+  await db.insert(siteGroupShares).values({ siteId, spaceId })
 }
 
 /** In-memory stand-in for the GLANCE_SESSIONS KV namespace (get/put/delete + ttl peek). */
