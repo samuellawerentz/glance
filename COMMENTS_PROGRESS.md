@@ -36,9 +36,9 @@ Status keys: `[ ]` todo · `[~]` in progress · `[x]` done · `[!]` blocked.
 - [x] **Gate P3** — thermo-nuclear PASS → 124 tests + typecheck + lint green → commit `Phase 3: …`
 
 ### Phase 4 — Client annotator + parent intent filter (thin, trust-free)
-- [ ] **Step 12** — pure `parseIntent(event, expected)` — shape/size/origin/source FILTER (not a trust guard). · *med*
-- [ ] **Step 13** — injected `annotate.js`: selection capture · Custom Highlight paint at parent-supplied offsets · intent-only `postMessage`. · *med* · dep:1,11
-- [ ] **Gate P4** — thermo-nuclear on Phase-4 diff → full suite green → commit `Phase 4: …`
+- [x] **Step 12** — pure `parseIntent(event, expected)` (`web/src/lib/parseIntent.ts`) — origin/source/shape/size FILTER (not a trust guard). Web now has a `bun test` runner. · *med*
+- [x] **Step 13** — `annotate.js` client: debounced selection capture → intent `postMessage` (quote/prefix/suffix + rect); Custom Highlight paint located by quote (whitespace-flexible); paint/focus trusted only from parent origin; no persisted status. · *med* · dep:1,11
+- [x] **Gate P4** — thermo-nuclear PASS → 129 tests (api 124 + web 5) + typecheck + lint + build:web green → commit `Phase 4: …`
 
 ### Phase 5 — Review-mode UI (manual smoke)
 - [ ] **Step 14** — opt-in review-mode split layout in `viewer.tsx` (persistent rail, not modal `Sheet`); append `?glance_annotate=1`; non-public only. · *med* · dep:9,11
