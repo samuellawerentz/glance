@@ -111,15 +111,18 @@ Status keys: `[ ]` todo · `[~]` in progress · `[x]` done · `[!]` blocked.
 - [x] `search-excludes-archived-for-normal-user` · P1 · new-module-spec · S-SEED
 - [x] `search-superadmin-sees-all-active` · P1 · new-module-spec · S-SEED
 - [x] `search-caps-results` · P2 · new-module-spec · S-SEED — > limit seeded → ≤ cap returned.
-- [~] `m-palette-remote-search` · P1 · manual — code shipped + `build:web` green; **live browser smoke not
-      run this session** (needs the dev stack + an authed session).
-- [~] `m-palette-open-and-copy` · P1 · manual — same: code shipped, live smoke pending.
-- [~] `m-palette-spaces-and-settings` · P2 · manual — same: code shipped, live smoke pending.
+- [x] `m-palette-remote-search` · P1 · **browser-verified** — typing "deck" returns the Sites group with
+      "Launch Deck · owner/launch-deck"; live search via real miniflare D1.
+- [x] `m-palette-open-and-copy` · P1 · **browser-verified** — result row has Open (select) + Copy URL
+      (trailing button).
+- [x] `m-palette-spaces-and-settings` · P2 · **browser-verified** — Navigate (Dashboard/Admin/New
+      space/Install CLI) + Spaces group (owner) + Preferences all render; closing resets search state.
 
-### Phase 3 (manual — no web test runner) — code shipped + `build:web` green; live browser smoke pending
-- [~] `m-visibility-group-hint` · P1 · manual — visibility menu "Group" reads "This space only".
-- [~] `m-share-button-label` · P1 · manual — trigger reads "Share with people & groups".
-- [~] `m-share-empty-groups-cta` · P1 · manual — no groups → "New space" CTA shown in ShareDialog.
+### Phase 3 (manual — no web test runner) — browser-verified live (localhost stack, bootstrap auth)
+- [x] `m-visibility-group-hint` · P1 · **browser-verified** — visibility menu "Group" reads "This space only".
+- [x] `m-share-button-label` · P1 · **browser-verified** — card trigger reads "Share with people & groups".
+- [x] `m-share-empty-groups-cta` · P1 · **browser-verified** — superadmin (no groups) → ShareDialog shows
+      "You're not in any groups yet… New space" CTA.
 - [x] `m-share-triggers-present` · P2 · verified via source — Share trigger present on dashboard cards
       (`dashboard.tsx:693`), space cards (`space.tsx:139`), PreviewToolbar (`PreviewToolbar.tsx:119`).
 
@@ -146,6 +149,15 @@ Status keys: `[ ]` todo · `[~]` in progress · `[x]` done · `[!]` blocked.
 ---
 
 ## Log
+- 2026-06-28 — **Local browser smoke (localhost stack + bootstrap auth) — found & fixed 2 palette bugs.**
+  Stood up the worker + SPA on a local miniflare D1, bootstrapped a superadmin, seeded sites. Live
+  `/api/sites/search` E2E verified (title/slug/space match, empty-q→[], isOwner). Browser smoke caught:
+  (1) palette used `useFetcher().load('/api/..')` which resolves an RR route not a worker endpoint →
+  search returned nothing; switched to the `api` helper + state + request-id race guard. (2) spaces-load
+  gated on `onOpenChange` which the externally-controlled `open` (⌘K/header button) bypasses → Spaces
+  group never appeared; moved load+reset to a dialog-content ref-callback (effect-free idiom). Both fixed,
+  re-verified live, committed `fa90685`. All Phase-2/3 `m-*` UI cases now browser-verified. 91 tests still
+  green. **Phase-1 Checkpoint (deploy re-measure) remains the only USER-gated item.**
 - 2026-06-28 — **Phase 3 shipped (Steps 8-10).** Group hint → "This space only"; ShareDialog trigger →
   "Share with people & groups" + empty-groups "New space" CTA; Share-trigger presence reconfirmed across
   the three surfaces. Gate P3 green (91 pass / tsc / lint / build), committed ea64a88. cmdk Share action
