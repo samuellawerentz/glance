@@ -5,7 +5,6 @@ import { ApiError } from '@/lib/api'
 import { comments, type Thread } from '@/lib/comments'
 import type { Me, ViewerSite } from '@/lib/types'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
 import { Composer } from '@/components/review/Composer'
 
 // Anchor-status badges. anchored is the silent default (no badge); the rest signal that the
@@ -84,10 +83,9 @@ export function ThreadCard({
         ))}
       </ul>
 
-      <div className="mt-3 flex items-center gap-2">
-        {replying ? (
+      {replying ? (
+        <div className="mt-3">
           <Composer
-            className="w-full"
             autoFocus
             placeholder="Reply…"
             submitLabel="Reply"
@@ -97,26 +95,39 @@ export function ThreadCard({
               setReplying(false)
             }}
           />
-        ) : (
-          <>
-            <Button variant="ghost" size="sm" onClick={() => setReplying(true)}>
-              Reply
-            </Button>
-            {canModerate &&
-              (thread.status === 'open' ? (
-                <Button variant="ghost" size="sm" onClick={() => run(() => comments.setStatus(site, thread.id, 'resolved'))}>
-                  <Check className="size-3.5" />
-                  Resolve
-                </Button>
-              ) : (
-                <Button variant="ghost" size="sm" onClick={() => run(() => comments.setStatus(site, thread.id, 'open'))}>
-                  <RotateCcw className="size-3.5" />
-                  Reopen
-                </Button>
-              ))}
-          </>
-        )}
-      </div>
+        </div>
+      ) : (
+        // Low-emphasis text actions — kept quiet so the thread, not its controls, reads first.
+        <div className="mt-2 flex items-center gap-4">
+          <button
+            type="button"
+            onClick={() => setReplying(true)}
+            className="text-muted-foreground text-xs transition-colors hover:text-foreground"
+          >
+            Reply
+          </button>
+          {canModerate &&
+            (thread.status === 'open' ? (
+              <button
+                type="button"
+                onClick={() => run(() => comments.setStatus(site, thread.id, 'resolved'))}
+                className="flex items-center gap-1 text-muted-foreground text-xs transition-colors hover:text-foreground"
+              >
+                <Check className="size-3" />
+                Resolve
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => run(() => comments.setStatus(site, thread.id, 'open'))}
+                className="flex items-center gap-1 text-muted-foreground text-xs transition-colors hover:text-foreground"
+              >
+                <RotateCcw className="size-3" />
+                Reopen
+              </button>
+            ))}
+        </div>
+      )}
     </div>
   )
 }
