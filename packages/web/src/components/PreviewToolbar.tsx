@@ -4,15 +4,14 @@ import { Link } from 'react-router'
 import type { ViewerSite } from '@/lib/types'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
-import { CopyButton } from '@/components/CopyButton'
 import { ShareDialog } from '@/components/ShareDialog'
 import { VISIBILITY_META } from '@/components/visibility'
 
-// Liquid-glass floating menu over the full-bleed preview: a compact, always-open pill — the site's
-// visibility icon + title, then icon-only actions (Home, Comments, Copy link, Share). Icon-only so
-// it doesn't hinder the content; labels live on hover (title/aria-label). It idle-fades when the
-// cursor leaves to stay out of the way — timer is event-driven (ref callback arms it, hover wakes
-// it) per the no-useEffect rule.
+// Liquid-glass floating menu pinned to the bottom of the full-bleed preview: a compact, always-open
+// pill — a visibility indicator, then icon-only actions (Home, Comments, Share). Icon-only so it
+// doesn't hinder the content; labels live on hover (title/aria-label). It idle-fades when the cursor
+// leaves to stay out of the way — timer is event-driven (ref callback arms it, hover wakes it) per
+// the no-useEffect rule.
 // The glass look layers three things: (1) an SVG feTurbulence→feDisplacementMap refraction applied
 // to the backdrop (Chromium-only; degrades to plain blur elsewhere), (2) blur+saturate+brightness
 // to lift the backdrop, (3) inset specular highlights + a top sheen for the curved-glass edge.
@@ -34,11 +33,11 @@ export function PreviewToolbar({ site, onReview }: { site: ViewerSite; onReview?
     setDimmed(false)
   }
 
-  const Icon = VISIBILITY_META[site.visibility].icon
-  const title = site.title ?? site.siteSlug
+  const vis = VISIBILITY_META[site.visibility]
+  const Icon = vis.icon
 
   return (
-    <div className="pointer-events-none fixed inset-x-0 top-4 z-50 flex justify-center px-4">
+    <div className="pointer-events-none fixed inset-x-0 bottom-4 z-50 flex justify-center px-4">
       {/* Refraction filter: organic turbulence warps the backdrop near the pill like real curved
           glass (the signature liquid-glass cue, beyond a flat blur). Referenced by backdrop-filter
           below. SVG-as-backdrop-filter is Chromium-only; elsewhere the url() no-ops and the blur
@@ -92,12 +91,10 @@ export function PreviewToolbar({ site, onReview }: { site: ViewerSite; onReview?
           className="pointer-events-none absolute inset-x-5 bottom-0 h-px bg-gradient-to-r from-transparent via-white/45 to-transparent"
         />
 
-        {/* site identity — static label, no longer a toggle */}
-        <div className="relative flex items-center gap-2 py-1.5 pl-3 pr-1.5 text-sm font-medium">
-          <Icon className="size-3.5 shrink-0 opacity-70" />
-          <span className="max-w-[32vw] truncate sm:max-w-[14rem]">{title}</span>
-        </div>
-
+        {/* visibility indicator (non-interactive) */}
+        <span className="relative flex items-center pl-2.5 pr-1 text-foreground/70" title={`${vis.label} — ${vis.hint}`}>
+          <Icon className="size-3.5" />
+        </span>
         <span className="relative mx-0.5 h-5 w-px bg-border" />
 
         {/* icon-only actions */}
@@ -119,14 +116,6 @@ export function PreviewToolbar({ site, onReview }: { site: ViewerSite; onReview?
               <MessageSquare />
             </Button>
           )}
-          <CopyButton
-            text={site.contentUrl}
-            label=""
-            title="Copy link"
-            variant="ghost"
-            size="icon"
-            className="size-8 rounded-full"
-          />
           {site.isOwner && <ShareDialog spaceSlug={site.spaceSlug} siteSlug={site.siteSlug} title={site.title} compact />}
         </div>
       </div>
