@@ -48,17 +48,22 @@ jobs:
           CF_D1_DATABASE_ID: ${{ vars.CF_D1_DATABASE_ID }}
           CF_KV_NAMESPACE_ID: ${{ vars.CF_KV_NAMESPACE_ID }}
           CF_WORKERS_SUBDOMAIN: ${{ vars.CF_WORKERS_SUBDOMAIN }}
+          # Allowed Google Workspace domain (e.g. plivo.com). Non-secret config — the OAuth callback
+          # re-verifies the signed hd claim, so the value is safe to substitute in plaintext here.
+          CF_ALLOWED_HD: ${{ vars.CF_ALLOWED_HD }}
         run: |
           : "${CF_ACCOUNT_ID:?set repo Actions variable CF_ACCOUNT_ID}"
           : "${CF_D1_DATABASE_ID:?set repo Actions variable CF_D1_DATABASE_ID}"
           : "${CF_KV_NAMESPACE_ID:?set repo Actions variable CF_KV_NAMESPACE_ID}"
           : "${CF_WORKERS_SUBDOMAIN:?set repo Actions variable CF_WORKERS_SUBDOMAIN}"
+          : "${CF_ALLOWED_HD:?set repo Actions variable CF_ALLOWED_HD}"
           for f in packages/api/wrangler.jsonc packages/api/wrangler.content.jsonc packages/web/public/_headers; do
             sed -i \
               -e "s/YOUR_ACCOUNT_ID/${CF_ACCOUNT_ID}/g" \
               -e "s/YOUR_D1_DATABASE_ID/${CF_D1_DATABASE_ID}/g" \
               -e "s/YOUR_KV_NAMESPACE_ID/${CF_KV_NAMESPACE_ID}/g" \
               -e "s/YOUR-SUBDOMAIN/${CF_WORKERS_SUBDOMAIN}/g" \
+              -e "s/yourcompany.com/${CF_ALLOWED_HD}/g" \
               "$f"
           done
 
