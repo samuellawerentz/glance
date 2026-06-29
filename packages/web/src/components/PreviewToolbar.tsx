@@ -5,13 +5,11 @@ import type { ViewerSite } from '@/lib/types'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { ShareDialog } from '@/components/ShareDialog'
-import { VISIBILITY_META } from '@/components/visibility'
 
 // Liquid-glass floating menu pinned to the bottom of the full-bleed preview: a compact, always-open
-// pill — a visibility indicator, then icon-only actions (Home, Comments, Share). Icon-only so it
-// doesn't hinder the content; labels live on hover (title/aria-label). It idle-fades when the cursor
-// leaves to stay out of the way — timer is event-driven (ref callback arms it, hover wakes it) per
-// the no-useEffect rule.
+// pill of icon-only actions (Home, Comments, Share). Icon-only so it doesn't hinder the content;
+// labels live on hover (title/aria-label). It idle-fades when the cursor leaves to stay out of the
+// way — timer is event-driven (ref callback arms it, hover wakes it) per the no-useEffect rule.
 // The glass look layers three things: (1) an SVG feTurbulence→feDisplacementMap refraction applied
 // to the backdrop (Chromium-only; degrades to plain blur elsewhere), (2) blur+saturate+brightness
 // to lift the backdrop, (3) inset specular highlights + a top sheen for the curved-glass edge.
@@ -32,9 +30,6 @@ export function PreviewToolbar({ site, onReview }: { site: ViewerSite; onReview?
     clear()
     setDimmed(false)
   }
-
-  const vis = VISIBILITY_META[site.visibility]
-  const Icon = vis.icon
 
   return (
     <div className="pointer-events-none fixed inset-x-0 bottom-4 z-50 flex justify-center px-4">
@@ -90,12 +85,6 @@ export function PreviewToolbar({ site, onReview }: { site: ViewerSite; onReview?
           aria-hidden
           className="pointer-events-none absolute inset-x-5 bottom-0 h-px bg-gradient-to-r from-transparent via-white/45 to-transparent"
         />
-
-        {/* visibility indicator (non-interactive) */}
-        <span className="relative flex items-center pl-2.5 pr-1 text-foreground/70" title={`${vis.label} — ${vis.hint}`}>
-          <Icon className="size-3.5" />
-        </span>
-        <span className="relative mx-0.5 h-5 w-px bg-border" />
 
         {/* icon-only actions */}
         <div className="relative flex items-center gap-0.5">
